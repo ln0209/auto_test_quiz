@@ -5,14 +5,14 @@ import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.edge.EdgeDriver;
 import org.openqa.selenium.edge.EdgeOptions;
-import org.openqa.selenium.ie.InternetExplorerDriver;
 import org.openqa.selenium.ie.InternetExplorerOptions;
-import org.openqa.selenium.remote.CapabilityType;
+import io.github.bonigarcia.wdm.WebDriverManager;
 
 public class BrowserFactory {
 
     public static WebDriver createDriver() {
         String browserType = ConfigReader.getProperty("browser", "chrome");
+        System.out.println("正在创建浏览器驱动，类型: " + browserType);
 
         switch (browserType.toLowerCase()) {
             case "chrome":
@@ -27,19 +27,23 @@ public class BrowserFactory {
     }
 
     private static WebDriver createChromeDriver() {
-        System.setProperty("webdriver.chrome.driver", ConfigReader.getChromeDriverPath());
+        // 自动下载和管理 ChromeDriver
+        WebDriverManager.chromedriver().setup();
 
         ChromeOptions options = new ChromeOptions();
         options.addArguments("--start-maximized");
         options.addArguments("--disable-notifications");
         options.addArguments("--disable-extensions");
         options.addArguments("--disable-popup-blocking");
+        options.addArguments("--no-sandbox");
+        options.addArguments("--disable-dev-shm-usage");
+        options.addArguments("--remote-allow-origins=*");
 
         return new ChromeDriver(options);
     }
 
     private static WebDriver createEdgeDriver() {
-        System.setProperty("webdriver.edge.driver", ConfigReader.getEdgeDriverPath());
+        WebDriverManager.edgedriver().setup();
 
         EdgeOptions options = new EdgeOptions();
         options.addArguments("--start-maximized");
@@ -50,33 +54,30 @@ public class BrowserFactory {
     }
 
     private static WebDriver createEdgeIEModeDriver() {
-        // 首先设置 IE Driver（IE Mode 需要）
-        System.setProperty("webdriver.ie.driver", ConfigReader.getIEDriverPath());
+        // 注意：IE Mode 可能仍然需要手动配置
+        // 这里先使用普通 Edge 模式
+        WebDriverManager.edgedriver().setup();
 
-        // 配置 Edge 使用 IE Mode
         EdgeOptions options = new EdgeOptions();
-        options.setCapability("ms:edgeOptions", getIEModeCapabilities());
-        options.setCapability(EdgeOptions.CAPABILITY, getIEModeCapabilities());
+        options.addArguments("--start-maximized");
 
-        // 设置 IE 选项（兼容性设置）
-        InternetExplorerOptions ieOptions = new InternetExplorerOptions();
-        ieOptions.ignoreZoomSettings();
-        ieOptions.introduceFlakinessByIgnoringSecurityDomains();
-        ieOptions.enablePersistentHovering();
+        // IE Mode 配置（可能需要额外设置）
+        try {
+            options.addArguments("--ie-mode-force");
+            String siteList = ConfigReader.getIESiteList();
+            if (siteList != null && !siteList.isEmpty()) {
+                options.addArguments("--ie-mode-site-list=" + siteList);
+            }
 
-        options.setCapability(InternetExplorerOptions.IE_OPTIONS, ieOptions);
+            InternetExplorerOptions ieOptions = new InternetExplorerOptions();
+            ieOptions.ignoreZoomSettings();
+            ieOptions.introduceFlakinessByIgnoringSecurityDomains();
+            options.setCapability(InternetExplorerOptions.IE_OPTIONS, ieOptions);
+        } catch (Exception e) {
+            System.out.println("IE Mode 配置失败，使用普通模式: " + e.getMessage());
+        }
 
-        System.setProperty("webdriver.edge.driver", ConfigReader.getEdgeDriverPath());
         return new EdgeDriver(options);
-    }
-
-    private static String getIEModeCapabilities() {
-        // 创建 IE Mode 配置
-        return String.format("{\"ms:edgeChromium\": true, \"ms:edgeOptions\": " +
-                        "{\"args\": [\"--ie-mode-force\"], " +
-                        "\"prefs\": {\"browser.edge.ie-mode.enabled\": true, " +
-                        "\"browser.edge.ie-mode.site-list\": \"%s\"}}}",
-                ConfigReader.getProperty("ie.site.list"));
     }
 
     public static void cleanupDriver(WebDriver driver) {
